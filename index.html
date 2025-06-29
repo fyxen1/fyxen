@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fyxen Waitlist</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      background: url('background.jpg') no-repeat center center fixed;
+      background-size: cover;
+    }
+    .container { text-align: center; padding: 80px 20px; }
+    h1 {
+      font-weight: bold;
+      color: white;
+    }
+    .btn {
+      background-color: green;
+      color: white;
+      padding: 15px 30px;
+      border: none;
+      font-size: 18px;
+      cursor: pointer;
+      border-radius: 8px;
+    }
+    .btn:active {
+      background-color: gray;
+    }
+
+    .popup {
+      position: fixed;
+      top: 0; right: -400px;
+      width: 300px; height: 100%;
+      background: white;
+      box-shadow: -2px 0 5px rgba(0,0,0,0.2);
+      transition: right 0.4s ease;
+      padding: 20px;
+      z-index: 1000;
+    }
+    .popup.open { right: 0; }
+    .popup h3 { margin-top: 0; }
+
+    .form-group { margin: 15px 0; text-align: left; }
+    .form-group label { display: block; margin-bottom: 5px; }
+    .form-group input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; }
+    .subscriber-list {
+      margin-top: 50px;
+      padding: 20px;
+      background: white;
+      border-radius: 12px;
+      max-width: 600px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .subscriber { display: flex; align-items: center; margin: 10px 0; }
+    .avatar { background-color: red; color: white; width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px; margin-right: 10px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <img src="logo.png" alt="Fyxen Logo" height="80">
+    <h1>We're Launching Soon</h1>
+    <button class="btn" id="waitlistButton" onclick="openPopup()">Join The Waitlist</button>
+  </div>
+
+  <div class="popup" id="popupForm">
+    <h3>Join the Waitlist</h3>
+    <div class="form-group">
+      <label for="name">Name:</label>
+      <input type="text" id="name" required>
+    </div>
+    <div class="form-group">
+      <label for="email">Email:</label>
+      <input type="email" id="email" required>
+    </div>
+    <button class="btn" onclick="handleWaitlist()">Submit</button>
+  </div>
+
+  <div class="subscriber-list" id="subscribers">
+    <h2>OUR SUBSCRIBERS</h2>
+  </div>
+
+  <script>
+    function openPopup() {
+      document.getElementById('popupForm').classList.add('open');
+    }
+
+    async function handleWaitlist() {
+      const name = document.getElementById('name').value.trim();
+      const email = document.getElementById('email').value.trim();
+      if (!name || !email) return alert("Please fill out both fields");
+
+      const docId = await checkSubscriber(email);
+
+      if (docId) {
+        await deleteFromFirebase(docId);
+        localStorage.removeItem("fyxen_user");
+        document.getElementById('waitlistButton').textContent = 'Join The Waitlist';
+        document.getElementById('waitlistButton').style.backgroundColor = 'green';
+      } else {
+        await saveToFirebase(name, email);
+        emailjs.send("service_rnfunv1", "template_m0mz0ws", {
+          to_name: name,
+          to_email: email
+        });
+        localStorage.setItem("fyxen_user", JSON.stringify({ name, email }));
+        document.getElementById('waitlistButton').textContent = 'Exit Waitlist';
+        document.getElementById('waitlistButton').style.backgroundColor = 'gray';
+      }
+
+      document.getElementById('popupForm').classList.remove('open');
+    }
+
+    function checkLocalStorage() {
+      const user = localStorage.getItem("fyxen_user");
+      if (user) {
+        document.getElementById('waitlistButton').textContent = 'Exit Waitlist';
+        document.getElementById('waitlistButton').style.backgroundColor = 'gray';
+      } else {
+        document.getElementById('waitlistButton').textContent = 'Join The Waitlist';
+        document.getElementById('waitlistButton').style.backgroundColor = 'green';
+      }
+    }
+
+    window.onload = checkLocalStorage;
+
+    function addSubscriberToList(name) {
+      const firstLetter = name.charAt(0).toUpperCase();
+      const div = document.createElement('div');
+      div.className = 'subscriber';
+      div.innerHTML = `<div class="avatar">${firstLetter}</div><div>${name}</div>`;
+      document.getElementById('subscribers').appendChild(div);
+    }
+  </script>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getFirestore, collection, addDoc, deleteDoc, doc, onSnapshot, query, orderBy, getDocs, where } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyCMkAALnbZnArwGucJqsXljce8zI4aL7bU",
+      authDomain: "fyxen-waitlist-d2dac.firebaseapp.com",
+      projectId: "fyxen-waitlist-d2dac",
+      storageBucket: "fyxen-waitlist-d2dac.firebasestorage.app",
+      messagingSenderId: "740279487596",
+      appId: "1:740279487596:web:c7b9e175eeca11dca49c49"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    window.saveToFirebase = async function(name, email) {
+      try {
+        await addDoc(collection(db, "subscribers"), { name, email, timestamp: Date.now() });
+        console.log("Saved to Firebase!");
+      } catch (e) {
+        console.error("Error saving: ", e);
+      }
+    };
+
+    window.deleteFromFirebase = async function(docId) {
+      try {
+        await deleteDoc(doc(db, "subscribers", docId));
+        console.log("Deleted from Firebase");
+      } catch (e) {
+        console.error("Error deleting:", e);
+      }
+    };
+
+    window.checkSubscriber = async function(email) {
+      const q = query(collection(db, "subscribers"), where("email", "==", email));
+      const querySnapshot = await getDocs(q);
+      if (!querySnapshot.empty) {
+        return querySnapshot.docs[0].id;
+      }
+      return null;
+    };
+
+    function renderSubscribers(snapshot) {
+      const container = document.getElementById('subscribers');
+      container.innerHTML = '<h2>OUR SUBSCRIBERS</h2>';
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        const name = data.name;
+        const firstLetter = name.charAt(0).toUpperCase();
+        const div = document.createElement('div');
+        div.className = 'subscriber';
+        div.innerHTML = `<div class="avatar">${firstLetter}</div><div>${name}</div>`;
+        container.appendChild(div);
+      });
+    }
+
+    const q = query(collection(db, "subscribers"), orderBy("timestamp", "desc"));
+    onSnapshot(q, renderSubscribers);
+  </script>
+
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+  <script>
+    emailjs.init("pzDCpqgNHJa0YhGOs");
+  </script>
+</body>
+</html>
